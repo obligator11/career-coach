@@ -34,11 +34,14 @@ async def callback(code: str, state: str, db: Session = Depends(get_db)):
 
     existing = db.query(User).filter(User.github_id == str(github_user["id"])).first()
     if existing:
+        existing.github_access_token = access_token
+        db.commit()
         return {"message": "Logged in", "user_id": str(existing.id), "github_login": github_user["login"]}
 
     new_user = User(
         github_id=str(github_user["id"]),
         email=github_user.get("email"),
+        github_access_token=access_token,
     )
     db.add(new_user)
     db.commit()
