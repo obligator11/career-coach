@@ -45,3 +45,32 @@ async def get_github_user(access_token: str) -> dict:
         )
         response.raise_for_status()
         return response.json()
+
+
+
+async def list_user_repos(access_token: str) -> list[dict]:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{GITHUB_API_URL}/user/repos",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/vnd.github+json",
+            },
+            params={"per_page": 100, "sort": "updated"},
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+async def list_repo_commits(access_token: str, owner: str, repo: str, per_page: int = 100) -> list[dict]:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{GITHUB_API_URL}/repos/{owner}/{repo}/commits",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/vnd.github+json",
+            },
+            params={"per_page": per_page},
+        )
+        response.raise_for_status()
+        return response.json()
