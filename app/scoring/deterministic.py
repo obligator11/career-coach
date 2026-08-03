@@ -97,3 +97,40 @@ def detect_languages(db: Session, user, repo: Repo, sample_size: int = 5) -> dic
     primary = max(percentages, key=percentages.get)
 
     return {"languages": percentages, "primary_language": primary}
+
+
+
+def complexity_score(db: Session, user, repo: Repo, sample_size: int = 5) -> dict:
+    """Sample recent commits and measure size/spread of changes."""
+    recent_commits = (
+        db.query(Commit)
+        .filter(Commit.repo_id == repo.id)
+        .order_by(Commit.committed_at.desc())
+        .limit(sample_size)
+        .all()
+    )
+
+    owner, repo_name = repo.name.split("/")
+    total_additions = 0
+    total_deletions = 0
+    total_files_changed = 0
+    sampled = 0
+
+    for commit in recent_commits:
+        detail = asyncio.run(
+            get_commit_detail(user.github_access_token, owner, repo_name, commit.sha)
+        )
+        stats = detail.get("stats", {})
+        total_additions += stats.get("additions", 0)
+        total_deletions += stats.get("deletions", 0)
+        total_files_changed += len(detail.get("files", []))
+        sampled += 1
+
+    if sampled == 0:
+        return {"avg_lines_changed": 0, "avg_files_per_commit": 0, "sampled_commits": 0}
+
+    return {
+        "avg_lines_changed": round((total_additions + total_deletions) / sampled, 1),
+        "avg_files_per_commit": round(total_files_changed / sampled, 1),
+        "sampled_commits": sampled,
+    }
