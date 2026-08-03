@@ -2,6 +2,26 @@ from collections import defaultdict
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.models.models import Commit, Repo
+import asyncio
+from app.github_client import get_commit_detail
+
+EXTENSION_TO_LANGUAGE = {
+    ".py": "Python",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript",
+    ".js": "JavaScript",
+    ".jsx": "JavaScript",
+    ".sql": "SQL",
+    ".yml": "YAML",
+    ".yaml": "YAML",
+    ".json": "JSON",
+    ".md": "Markdown",
+    ".html": "HTML",
+    ".css": "CSS",
+    ".sh": "Shell",
+    ".ps1": "PowerShell",
+    ".dockerfile": "Docker",
+}
 
 
 def commit_frequency_score(db: Session, repo: Repo) -> dict:
@@ -39,3 +59,41 @@ def commit_frequency_score(db: Session, repo: Repo) -> dict:
         "commits_per_active_day": round(len(commits) / len(active_days), 2),
         "longest_gap_days": longest_gap,
     }
+
+
+
+def detect_languages(db: Session, user, repo: Repo, sample_size: int = 5) -> dict:
+    """Sample the most recent commits in a repo and tally file extensions."""
+    recent_commits = (
+        db.query(Commit)
+        .filter(Commit.repo_id == repo.id)
+        .order_by(Commit.committed_at.desc())
+        .limit(sample_size)
+        .all()
+    )
+
+    owner, repo_name = repo.name.split("/")
+    language_counts: dict[str, int] = defaultdict(int)
+
+    for commit in recent_commits:
+        detail = asyncio.run(
+            get_commit_detail(user.github_access_token, owner, repo_name, commit.sha)
+        )
+        for f in detail.get("files", []):
+            filename = f["filename"].lower()
+            for ext, lang in EXTENSION_TO_LANGUAGE.items():
+                if filename.endswith(ext):
+                    language_counts[lang] += 1
+                    break
+
+    total = sum(language_counts.values())
+    if total == 0:
+        return {"languages": {}, "primary_language": None}
+
+    percentages = {
+        lang: round((count / total) * 100, 1)
+        for lang, count in language_counts.items()
+    }
+    primary = max(percentages, key=percentages.get)
+
+    return {"languages": percentages, "primary_language": primary}

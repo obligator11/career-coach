@@ -74,3 +74,16 @@ async def list_repo_commits(access_token: str, owner: str, repo: str, per_page: 
         )
         response.raise_for_status()
         return response.json()
+
+
+async def get_commit_detail(access_token: str, owner: str, repo: str, sha: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{GITHUB_API_URL}/repos/{owner}/{repo}/commits/{sha}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+        response.raise_for_status()
+        return response.json()
