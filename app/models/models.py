@@ -29,3 +29,13 @@ class Commit(Base):
     diff_summary = Column(String, nullable=True)
     committed_at = Column(DateTime, nullable=False)
     raw_metadata = Column(JSON, nullable=True)
+
+
+class SkillScore(Base):
+    __tablename__ = "skill_scores"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    skill_name = Column(String, nullable=False)
+    score = Column(Float, nullable=False)
+    evidence_commit_id = Column(UUID(as_uuid=True), ForeignKey("commits.id"), nullable=True)
+    computed_at = Column(DateTime, default=datetime.utcnow)
