@@ -134,3 +134,18 @@ def complexity_score(db: Session, user, repo: Repo, sample_size: int = 5) -> dic
         "avg_files_per_commit": round(total_files_changed / sampled, 1),
         "sampled_commits": sampled,
     }
+
+
+def score_repo(db: Session, user, repo: Repo) -> dict:
+    """Combine all deterministic signals into one profile for a repo."""
+    frequency = commit_frequency_score(db, repo)
+    languages = detect_languages(db, user, repo)
+    complexity = complexity_score(db, user, repo)
+
+    return {
+        "repo_name": repo.name,
+        "frequency": frequency,
+        "languages": languages,
+        "complexity": complexity,
+    }
+
