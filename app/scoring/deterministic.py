@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.models import Commit, Repo
 import asyncio
 from app.github_client import get_commit_detail
+from app.models.models import SkillScore
 
 EXTENSION_TO_LANGUAGE = {
     ".py": "Python",
@@ -149,3 +150,55 @@ def score_repo(db: Session, user, repo: Repo) -> dict:
         "complexity": complexity,
     }
 
+
+
+def compute_and_store_skill_scores(db: Session, user) -> list[dict]:
+    """Aggregate deterministic signals across all repos into per-language skill scores."""
+    repos = db.query(Repo).filter(Repo.user_id == user.id).all()
+
+    # Aggregate raw signals per language, across all repos
+    language_stats: dict[str, dict] = defaultdict(lambda: {
+        "total_lines_changed": 0,
+        "total_commits_per_active_day": 0.0,
+        "total_percentage": 0.0,
+        "repo_count": 0,
+    })
+
+    for repo in repos:
+        profile = score_repo(db, user, repo)
+        languages = profile["languages"]["languages"]
+        if not languages:
+            continue
+
+        for lang, percentage in languages.items():
+            stats = language_stats[lang]
+            stats["total_lines_changed"] += profile["complexity"]["avg_lines_changed"]
+            stats["total_commits_per_active_day"] += profile["frequency"]["commits_per_active_day"]
+            stats["total_percentage"] += percentage
+            stats["repo_count"] += 1
+
+    results = []
+    for lang, stats in language_stats.items():
+        n = stats["repo_count"]
+        avg_lines = stats["total_lines_changed"] / n
+        avg_freq = stats["total_commits_per_active_day"] / n
+        avg_pct = stats["total_percentage"] / n
+
+        score = min(
+            1.0,
+            (avg_lines / 200) * 0.5
+            + (avg_freq / 5) * 0.3
+            + (avg_pct / 100) * 0.2,
+        )
+        score = round(score, 3)
+
+        skill_score = SkillScore(
+            user_id=user.id,
+            skill_name=lang,
+            score=score,
+        )
+        db.add(skill_score)
+        results.append({"skill_name": lang, "score": score, "repos_contributing": n})
+
+    db.commit()
+    return results
