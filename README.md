@@ -14,7 +14,7 @@ Built as a deep-dive Python portfolio project: FastAPI backend, RQ/Redis backgro
 |---|---|
 | 0 — Environment setup | ✅ Done |
 | 1 — GitHub ingestion & storage | ✅ Done |
-| 2 — Deterministic scoring | ⬜ Not started |
+| 2 — Deterministic scoring | ✅ Done |
 | 3 — LLM skill scoring | ⬜ Not started |
 | 4 — Roadmap engine | ⬜ Not started |
 | 5 — Dashboard | ⬜ Not started |
