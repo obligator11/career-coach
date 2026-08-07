@@ -5,6 +5,8 @@ from app.models.models import Commit, Repo
 import asyncio
 from app.github_client import get_commit_detail
 from app.models.models import SkillScore
+import math
+
 
 EXTENSION_TO_LANGUAGE = {
     ".py": "Python",
@@ -184,13 +186,16 @@ def compute_and_store_skill_scores(db: Session, user) -> list[dict]:
         avg_freq = stats["total_commits_per_active_day"] / n
         avg_pct = stats["total_percentage"] / n
 
-        score = min(
-            1.0,
-            (avg_lines / 200) * 0.5
-            + (avg_freq / 5) * 0.3
-            + (avg_pct / 100) * 0.2,
+        lines_component = min(1.0, math.log1p(avg_lines) / math.log1p(3000))
+        freq_component = min(1.0, avg_freq / 5)
+        pct_component = avg_pct / 100
+
+        score = (
+            lines_component * 0.5
+            + freq_component * 0.3
+            + pct_component * 0.2
         )
-        score = round(score, 3)
+        score = round(min(1.0, score), 3)
 
         skill_score = SkillScore(
             user_id=user.id,
