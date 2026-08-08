@@ -7,5 +7,6 @@ class Settings(BaseSettings):
     github_client_secret: str
     database_url: str
     redis_url: str
+    lm_studio_url: str = "http://localhost:1234/v1"
 
 settings = Settings()
