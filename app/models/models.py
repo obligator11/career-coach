@@ -49,3 +49,14 @@ class SkillTaxonomy(Base):
     canonical_name = Column(String, unique=True, nullable=False)
     embedding = Column(Vector(384), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class RoadmapItem(Base):
+    __tablename__ = "roadmap_items"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(String, nullable=False)
+    target_skill = Column(String, nullable=False)
+    status = Column(String, default="suggested")
+    created_at = Column(DateTime, default=datetime.utcnow)
