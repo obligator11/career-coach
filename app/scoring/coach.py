@@ -9,25 +9,30 @@ class CoachAdvice(BaseModel):
     message: str
 
 
-SYSTEM_PROMPT = """You are a friendly, encouraging career coach talking to a developer about their GitHub activity.
+SYSTEM_PROMPT = """You are a warm, encouraging career coach having a real spoken conversation with a developer.
+This is a VOICE conversation - keep replies SHORT (1-3 sentences), natural, and conversational, like a real person talking, not writing.
 Respond with ONLY a JSON object, no other text:
-{"message": "your advice, 1-2 short sentences, warm and specific, like a real coach talking"}
-Be concrete - reference the actual skill or project mentioned. Keep it conversational, not corporate."""
+{"message": "your spoken reply"}
+Never use bullet points, headers, or markdown - this will be spoken aloud.
+React directly and specifically to what the developer just said. Be genuinely helpful, not generic."""
 
 
-async def get_coach_advice(context: str) -> CoachAdvice:
+async def get_coach_advice(user_message: str, context: str = "", history: list[dict] | None = None) -> CoachAdvice:
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    if context:
+        messages.append({"role": "system", "content": f"Known context about this developer: {context}"})
+
+    if history:
+        for turn in history[-6:]:  # last 3 exchanges, keeps prompt size reasonable
+            messages.append(turn)
+
+    messages.append({"role": "user", "content": user_message})
+
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
             OLLAMA_URL,
-            json={
-                "model": "llama3.1:latest",
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": context},
-                ],
-                "stream": False,
-                "format": "json",
-            },
+            json={"model": "llama3.1:latest", "messages": messages, "stream": False, "format": "json"},
         )
         response.raise_for_status()
         raw_text = response.json()["message"]["content"]

@@ -7,6 +7,9 @@ from app.models.models import User, Repo, SkillScore, SkillTaxonomy, RoadmapItem
 from app.scoring.coach import get_coach_advice
 import asyncio
 
+from fastapi.responses import Response
+from app.scoring.voice import generate_speech
+
 router = APIRouter(prefix="/me", tags=["dashboard"])
 
 
@@ -74,12 +77,34 @@ def get_summary(user_id: str, db: Session = Depends(get_db)):
 
 @router.get("/coach-advice")
 def coach_advice(user_id: str, topic: str, db: Session = Depends(get_db)):
-    """topic examples: a skill name, a repo name, 'roadmap' """
+    """topic examples: a skill name, a repo name, 'roadmap', or a real spoken question"""
     user = get_current_user(user_id, db)
     try:
-        advice = asyncio.run(get_coach_advice(f"The developer is looking at: {topic}"))
+        scored = (
+            db.query(SkillScore, SkillTaxonomy)
+            .join(SkillTaxonomy, SkillScore.canonical_skill_id == SkillTaxonomy.id)
+            .filter(SkillScore.user_id == user.id)
+            .all()
+        )
+        top_skills = sorted(
+            {t.canonical_name: s.score for s, t in scored}.items(),
+            key=lambda x: -x[1]
+        )[:3]
+        roadmap = db.query(RoadmapItem).filter(RoadmapItem.user_id == user.id).all()
+
+        context = (
+            f"Top skills: {', '.join(f'{name} ({score:.2f})' for name, score in top_skills)}. "
+            f"Suggested next projects: {', '.join(r.title for r in roadmap[:2])}."
+        )
+
+        advice = asyncio.run(get_coach_advice(topic, context=context))
         return {"message": advice.message}
     except Exception as e:
         print(f"Coach advice failed: {e}")
         return {"message": "Keep going - every commit counts."}
-    
+
+
+@router.get("/coach-voice")
+def coach_voice(text: str):
+    audio_bytes = generate_speech(text, voice="af_sky")
+    return Response(content=audio_bytes, media_type="audio/wav")
