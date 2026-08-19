@@ -76,10 +76,12 @@ def get_summary(user_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/coach-advice")
-def coach_advice(user_id: str, topic: str, db: Session = Depends(get_db)):
-    """topic examples: a skill name, a repo name, 'roadmap', or a real spoken question"""
+def coach_advice(user_id: str, topic: str, history: str = "[]", db: Session = Depends(get_db)):
     user = get_current_user(user_id, db)
     try:
+        import json
+        parsed_history = json.loads(history)
+
         scored = (
             db.query(SkillScore, SkillTaxonomy)
             .join(SkillTaxonomy, SkillScore.canonical_skill_id == SkillTaxonomy.id)
@@ -97,7 +99,7 @@ def coach_advice(user_id: str, topic: str, db: Session = Depends(get_db)):
             f"Suggested next projects: {', '.join(r.title for r in roadmap[:2])}."
         )
 
-        advice = asyncio.run(get_coach_advice(topic, context=context))
+        advice = asyncio.run(get_coach_advice(topic, context=context, history=parsed_history))
         return {"message": advice.message}
     except Exception as e:
         print(f"Coach advice failed: {e}")

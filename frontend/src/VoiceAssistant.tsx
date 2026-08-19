@@ -3,11 +3,14 @@ import { useState, useRef } from 'react';
 const USER_ID = 'bd104925-3234-4fd7-a183-0528989d798d';
 const API_BASE = 'http://127.0.0.1:8000';
 
+interface Turn { role: 'user' | 'assistant'; content: string; }
+
 export default function VoiceAssistant({ onStatusChange }: { onStatusChange: (s: 'idle' | 'thinking' | 'online') => void }) {
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [reply, setReply] = useState('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const historyRef = useRef<Turn[]>([]);
 
   const speak = async (text: string) => {
     try {
@@ -19,7 +22,6 @@ export default function VoiceAssistant({ onStatusChange }: { onStatusChange: (s:
         await audioRef.current.play();
       }
     } catch {
-      // Fallback to browser voice if Kokoro is unavailable for any reason
       const utterance = new SpeechSynthesisUtterance(text);
       window.speechSynthesis.speak(utterance);
     }
@@ -46,9 +48,16 @@ export default function VoiceAssistant({ onStatusChange }: { onStatusChange: (s:
       onStatusChange('thinking');
 
       try {
-        const res = await fetch(`${API_BASE}/me/coach-advice?user_id=${USER_ID}&topic=${encodeURIComponent(text)}`);
+        const res = await fetch(
+          `${API_BASE}/me/coach-advice?user_id=${USER_ID}&topic=${encodeURIComponent(text)}&history=${encodeURIComponent(JSON.stringify(historyRef.current))}`
+        );
         const data = await res.json();
         setReply(data.message);
+
+        historyRef.current.push({ role: 'user', content: text });
+        historyRef.current.push({ role: 'assistant', content: data.message });
+        if (historyRef.current.length > 10) historyRef.current = historyRef.current.slice(-10);
+
         await speak(data.message);
       } catch {
         const fallback = "I couldn't reach my thinking module right now.";
