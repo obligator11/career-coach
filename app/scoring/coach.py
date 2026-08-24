@@ -1,6 +1,8 @@
 import httpx
 import json
 from pydantic import BaseModel
+from google import genai
+from app.config import settings
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 
@@ -36,5 +38,29 @@ async def get_coach_advice(user_message: str, context: str = "", history: list[d
         )
         response.raise_for_status()
         raw_text = response.json()["message"]["content"]
+
+    return CoachAdvice(**json.loads(raw_text))
+
+
+
+async def get_coach_advice_gemini(user_message: str, context: str = "", history: list[dict] | None = None) -> CoachAdvice:
+    client = genai.Client(api_key=settings.gemini_api_key)
+
+    prompt_parts = [SYSTEM_PROMPT]
+    if context:
+        prompt_parts.append(f"Known context about this developer: {context}")
+    if history:
+        for turn in history[-6:]:
+            prompt_parts.append(f"{turn['role']}: {turn['content']}")
+    prompt_parts.append(f"user: {user_message}")
+
+    response = await client.aio.models.generate_content(
+        model="gemini-3.6-flash",
+        contents="\n\n".join(prompt_parts),
+    )
+
+    raw_text = response.text.strip()
+    if raw_text.startswith("```"):
+        raw_text = raw_text.strip("`").removeprefix("json").strip()
 
     return CoachAdvice(**json.loads(raw_text))

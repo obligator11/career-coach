@@ -10,6 +10,8 @@ import asyncio
 from fastapi.responses import Response
 from app.scoring.voice import generate_speech
 
+from app.scoring.coach import get_coach_advice, get_coach_advice_gemini
+
 router = APIRouter(prefix="/me", tags=["dashboard"])
 
 
@@ -76,7 +78,7 @@ def get_summary(user_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/coach-advice")
-def coach_advice(user_id: str, topic: str, history: str = "[]", db: Session = Depends(get_db)):
+def coach_advice(user_id: str, topic: str, history: str = "[]", mode: str = "local", db: Session = Depends(get_db)):
     user = get_current_user(user_id, db)
     try:
         import json
@@ -99,7 +101,11 @@ def coach_advice(user_id: str, topic: str, history: str = "[]", db: Session = De
             f"Suggested next projects: {', '.join(r.title for r in roadmap[:2])}."
         )
 
-        advice = asyncio.run(get_coach_advice(topic, context=context, history=parsed_history))
+        if mode == "gemini":
+            advice = asyncio.run(get_coach_advice_gemini(topic, context=context, history=parsed_history))
+        else:
+            advice = asyncio.run(get_coach_advice(topic, context=context, history=parsed_history))
+
         return {"message": advice.message}
     except Exception as e:
         print(f"Coach advice failed: {e}")

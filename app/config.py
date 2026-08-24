@@ -8,5 +8,6 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str
     lm_studio_url: str = "http://localhost:1234/v1"
+    gemini_api_key: str
 
 settings = Settings()
