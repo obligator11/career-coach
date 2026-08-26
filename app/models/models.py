@@ -60,3 +60,17 @@ class RoadmapItem(Base):
     target_skill = Column(String, nullable=False)
     status = Column(String, default="suggested")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+
+class UserPreferences(Base):
+    __tablename__ = "user_preferences"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False)
+    degree_field = Column(String, nullable=True)
+    target_roles = Column(String, nullable=True)
+    preferred_locations = Column(String, nullable=True)
+    remote_preference = Column(String, nullable=True)
+    experience_level = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
