@@ -2,15 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.models import User, Repo, SkillScore, SkillTaxonomy, RoadmapItem
+from app.models.models import User, Repo, SkillScore, SkillTaxonomy, RoadmapItem, UserPreferences
 
-from app.scoring.coach import get_coach_advice
+from app.scoring.coach import get_coach_advice, get_coach_advice_gemini
 import asyncio
 
 from fastapi.responses import Response
 from app.scoring.voice import generate_speech
-
-from app.scoring.coach import get_coach_advice, get_coach_advice_gemini
 
 router = APIRouter(prefix="/me", tags=["dashboard"])
 
@@ -116,3 +114,51 @@ def coach_advice(user_id: str, topic: str, history: str = "[]", mode: str = "loc
 def coach_voice(text: str):
     audio_bytes = generate_speech(text, voice="af_sky")
     return Response(content=audio_bytes, media_type="audio/wav")
+
+
+@router.get("/preferences")
+def get_preferences(user_id: str, db: Session = Depends(get_db)):
+    user = get_current_user(user_id, db)
+    prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user.id).first()
+    if not prefs:
+        return {"exists": False}
+    return {
+        "exists": True,
+        "degree_field": prefs.degree_field,
+        "target_roles": prefs.target_roles,
+        "preferred_locations": prefs.preferred_locations,
+        "remote_preference": prefs.remote_preference,
+        "experience_level": prefs.experience_level,
+    }
+
+
+@router.post("/preferences")
+def save_preferences(
+    user_id: str,
+    degree_field: str,
+    target_roles: str,
+    preferred_locations: str,
+    remote_preference: str,
+    experience_level: str,
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(user_id, db)
+    prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user.id).first()
+    if prefs:
+        prefs.degree_field = degree_field
+        prefs.target_roles = target_roles
+        prefs.preferred_locations = preferred_locations
+        prefs.remote_preference = remote_preference
+        prefs.experience_level = experience_level
+    else:
+        prefs = UserPreferences(
+            user_id=user.id,
+            degree_field=degree_field,
+            target_roles=target_roles,
+            preferred_locations=preferred_locations,
+            remote_preference=remote_preference,
+            experience_level=experience_level,
+        )
+        db.add(prefs)
+    db.commit()
+    return {"status": "saved"}
