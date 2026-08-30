@@ -35,6 +35,76 @@ function loadTopics(): Topic[] {
   }
 }
 
+function TagInput({
+  placeholder,
+  values,
+  onChange,
+}: {
+  placeholder: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+
+  const commitDraft = () => {
+    const cleaned = draft.trim();
+    if (cleaned && !values.includes(cleaned)) {
+      onChange([...values, cleaned]);
+    }
+    setDraft('');
+  };
+
+  const removeTag = (tag: string) => {
+    onChange(values.filter((v) => v !== tag));
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex', flexWrap: 'wrap', gap: 6, padding: 8,
+        borderRadius: 6, border: '1px solid #2a2a40', background: '#16162a', minHeight: 20,
+      }}
+    >
+      {values.map((tag) => (
+        <span
+          key={tag}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px',
+            borderRadius: 14, background: '#2a2350', color: '#c084fc', fontSize: 12,
+          }}
+        >
+          {tag}
+          <span onClick={() => removeTag(tag)} style={{ cursor: 'pointer', fontWeight: 700, color: '#888' }}>×</span>
+        </span>
+      ))}
+      <input
+        value={draft}
+        onChange={(e) => {
+          if (e.target.value.endsWith(',')) {
+            setDraft(e.target.value.slice(0, -1));
+            commitDraft();
+          } else {
+            setDraft(e.target.value);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commitDraft();
+          } else if (e.key === 'Backspace' && draft === '' && values.length > 0) {
+            removeTag(values[values.length - 1]);
+          }
+        }}
+        placeholder={values.length === 0 ? placeholder : ''}
+        style={{
+          flex: 1, minWidth: 100, background: 'transparent', border: 'none',
+          color: '#fff', outline: 'none', fontSize: 13,
+        }}
+      />
+    </div>
+  );
+}
+
 function App() {
   const [mode, setMode] = useState<'local' | 'gemini' | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -46,15 +116,14 @@ function App() {
   const ambientTimer = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Preferences (job search setup) - checked once mode is picked, shown once if missing
   const [prefsChecked, setPrefsChecked] = useState(false);
-  const [prefsExist, setPrefsExist] = useState(true); // assume true until checked, avoids a flash of the form
+  const [prefsExist, setPrefsExist] = useState(true);
   const [prefsForm, setPrefsForm] = useState({
     degree_field: '',
-    target_roles: '',
-    preferred_locations: '',
+    target_roles: [] as string[],
+    preferred_locations: [] as string[],
     remote_preference: 'remote',
-    experience_level: 'entry',
+    experience_level: 'junior',
   });
 
   useEffect(() => {
@@ -172,12 +241,18 @@ function App() {
   };
 
   const savePreferences = async () => {
-    const params = new URLSearchParams({ user_id: USER_ID, ...prefsForm });
+    const params = new URLSearchParams({
+      user_id: USER_ID,
+      degree_field: prefsForm.degree_field,
+      target_roles: prefsForm.target_roles.join(','),
+      preferred_locations: prefsForm.preferred_locations.join(','),
+      remote_preference: prefsForm.remote_preference,
+      experience_level: prefsForm.experience_level,
+    });
     await fetch(`${API_BASE}/me/preferences?${params.toString()}`, { method: 'POST' });
     setPrefsExist(true);
   };
 
-  // Screen 1: pick local vs Gemini
   if (!mode) {
     return (
       <div
@@ -222,7 +297,6 @@ function App() {
     );
   }
 
-  // Screen 2: one-time preferences setup, only if mode is picked, prefs have been checked, and none exist
   if (mode && prefsChecked && !prefsExist) {
     return (
       <div
@@ -243,17 +317,15 @@ function App() {
             onChange={(e) => setPrefsForm({ ...prefsForm, degree_field: e.target.value })}
             style={{ padding: 10, borderRadius: 6, border: '1px solid #2a2a40', background: '#16162a', color: '#fff' }}
           />
-          <input
-            placeholder="Target roles (comma-separated)"
-            value={prefsForm.target_roles}
-            onChange={(e) => setPrefsForm({ ...prefsForm, target_roles: e.target.value })}
-            style={{ padding: 10, borderRadius: 6, border: '1px solid #2a2a40', background: '#16162a', color: '#fff' }}
+          <TagInput
+            placeholder="Target roles - type and press Enter or comma"
+            values={prefsForm.target_roles}
+            onChange={(vals) => setPrefsForm({ ...prefsForm, target_roles: vals })}
           />
-          <input
-            placeholder="Preferred locations (comma-separated)"
-            value={prefsForm.preferred_locations}
-            onChange={(e) => setPrefsForm({ ...prefsForm, preferred_locations: e.target.value })}
-            style={{ padding: 10, borderRadius: 6, border: '1px solid #2a2a40', background: '#16162a', color: '#fff' }}
+          <TagInput
+            placeholder="Preferred locations - type and press Enter or comma"
+            values={prefsForm.preferred_locations}
+            onChange={(vals) => setPrefsForm({ ...prefsForm, preferred_locations: vals })}
           />
           <select
             value={prefsForm.remote_preference}
@@ -270,8 +342,8 @@ function App() {
             onChange={(e) => setPrefsForm({ ...prefsForm, experience_level: e.target.value })}
             style={{ padding: 10, borderRadius: 6, border: '1px solid #2a2a40', background: '#16162a', color: '#fff' }}
           >
-            <option value="entry">Entry level</option>
-            <option value="mid">Mid level</option>
+            <option value="intern">Intern</option>
+            <option value="junior">Junior</option>
             <option value="senior">Senior</option>
           </select>
           <button
@@ -327,14 +399,6 @@ function App() {
       </div>
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'nowrap', maxWidth: 1400, margin: '0 auto' }}>
-        {/*
-          Scope note: originally a career coach only. Plan has shifted toward a
-          more general assistant (Jarvis-style) that happens to also coach on
-          career/skills - same underlying app, broader capability set over time.
-          Not renaming components yet since the coach features are still the
-          core, working functionality; this comment just tracks the direction.
-        */}
-
         <div style={{ flex: '0 1 260px', minWidth: 220 }}>
           <div
             style={{
