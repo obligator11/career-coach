@@ -9,5 +9,7 @@ class Settings(BaseSettings):
     redis_url: str
     lm_studio_url: str = "http://localhost:1234/v1"
     gemini_api_key: str
+    adzuna_app_id: str
+    adzuna_app_key: str
 
 settings = Settings()
