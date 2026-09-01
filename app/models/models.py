@@ -67,10 +67,26 @@ class UserPreferences(Base):
     __tablename__ = "user_preferences"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False)
+    assistant_name = Column(String, nullable=True, default="Nova")
     degree_field = Column(String, nullable=True)
     target_roles = Column(String, nullable=True)
     preferred_locations = Column(String, nullable=True)
     remote_preference = Column(String, nullable=True)
     experience_level = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
+class JobApplication(Base):
+    __tablename__ = "job_applications"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    title = Column(String, nullable=False)
+    company = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    url = Column(String, nullable=True)
+    source = Column(String, nullable=True)
+    status = Column(String, default="found")  # found / interested / applied / rejected
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
