@@ -10,6 +10,9 @@ import asyncio
 from fastapi.responses import Response
 from app.scoring.voice import generate_speech
 
+from app.scoring.jobs import search_all_jobs
+from app.models.models import JobApplication
+
 router = APIRouter(prefix="/me", tags=["dashboard"])
 
 
@@ -124,6 +127,7 @@ def get_preferences(user_id: str, db: Session = Depends(get_db)):
         return {"exists": False}
     return {
         "exists": True,
+        "assistant_name": prefs.assistant_name or "Nova",
         "degree_field": prefs.degree_field,
         "target_roles": prefs.target_roles,
         "preferred_locations": prefs.preferred_locations,
@@ -135,6 +139,7 @@ def get_preferences(user_id: str, db: Session = Depends(get_db)):
 @router.post("/preferences")
 def save_preferences(
     user_id: str,
+    assistant_name: str,
     degree_field: str,
     target_roles: str,
     preferred_locations: str,
@@ -145,6 +150,7 @@ def save_preferences(
     user = get_current_user(user_id, db)
     prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user.id).first()
     if prefs:
+        prefs.assistant_name = assistant_name
         prefs.degree_field = degree_field
         prefs.target_roles = target_roles
         prefs.preferred_locations = preferred_locations
@@ -153,6 +159,7 @@ def save_preferences(
     else:
         prefs = UserPreferences(
             user_id=user.id,
+            assistant_name=assistant_name,
             degree_field=degree_field,
             target_roles=target_roles,
             preferred_locations=preferred_locations,
@@ -162,3 +169,93 @@ def save_preferences(
         db.add(prefs)
     db.commit()
     return {"status": "saved"}
+
+
+
+
+@router.get("/jobs")
+async def get_jobs(user_id: str, db: Session = Depends(get_db)):
+    user = get_current_user(user_id, db)
+    prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user.id).first()
+
+    if not prefs or not prefs.target_roles:
+        return {"jobs": [], "message": "No preferences saved yet - set your target roles first."}
+
+    roles = [r.strip() for r in prefs.target_roles.split(",") if r.strip()]
+    location = ""
+    if prefs.preferred_locations:
+        first_location = prefs.preferred_locations.split(",")[0].strip()
+        if first_location.lower() != "remote":
+            location = first_location
+
+    seen_titles = set()
+    saved_jobs = []
+    for role in roles[:3]:
+        results = await search_all_jobs(role, location)
+        for job in results:
+            key = f"{job['title']}|{job['company']}"
+            if key in seen_titles:
+                continue
+            seen_titles.add(key)
+
+            existing = (
+                db.query(JobApplication)
+                .filter(JobApplication.user_id == user.id, JobApplication.title == job["title"], JobApplication.company == job["company"])
+                .first()
+            )
+            if existing:
+                saved_jobs.append(existing)
+                continue
+
+            new_job = JobApplication(
+                user_id=user.id,
+                title=job["title"],
+                company=job.get("company"),
+                location=job.get("location"),
+                url=job.get("url"),
+                source=job.get("source"),
+                status="found",
+            )
+            db.add(new_job)
+            db.flush()
+            saved_jobs.append(new_job)
+
+    db.commit()
+
+    return {
+        "jobs": [
+            {
+                "id": str(j.id),
+                "title": j.title,
+                "company": j.company,
+                "location": j.location,
+                "url": j.url,
+                "source": j.source,
+                "status": j.status,
+            }
+            for j in saved_jobs[:20]
+        ],
+        "searched_roles": roles[:3],
+    }
+
+
+@router.get("/jobs/saved")
+def get_saved_jobs(user_id: str, db: Session = Depends(get_db)):
+    """Just return what's already in the DB, no new API calls - for quick reloads."""
+    user = get_current_user(user_id, db)
+    jobs = db.query(JobApplication).filter(JobApplication.user_id == user.id).order_by(JobApplication.created_at.desc()).all()
+    return [
+        {"id": str(j.id), "title": j.title, "company": j.company, "location": j.location, "url": j.url, "source": j.source, "status": j.status}
+        for j in jobs
+    ]
+
+
+@router.post("/jobs/{job_id}/status")
+def update_job_status(job_id: str, status: str, user_id: str, db: Session = Depends(get_db)):
+    user = get_current_user(user_id, db)
+    job = db.query(JobApplication).filter(JobApplication.id == job_id, JobApplication.user_id == user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job.status = status
+    db.commit()
+    return {"status": "updated"}
