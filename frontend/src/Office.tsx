@@ -1,23 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 
-export type ZoneKey = 'whiteboard' | 'bookshelf' | 'desk' | 'bedroom';
+export type ZoneKey = 'whiteboard' | 'bookshelf' | 'desk' | 'bedroom' | 'jobs';
 
 interface OfficeProps {
-  onZoneClick: (zone: 'whiteboard' | 'bookshelf' | 'desk') => void;
+  onZoneClick: (zone: 'whiteboard' | 'bookshelf' | 'desk' | 'jobs') => void;
   onSleepToggle: () => void;
   bubbleText: string | null;
   status: 'idle' | 'thinking' | 'online' | 'asleep';
   requestedZone: ZoneKey | null;
 }
 
-const HALLWAY = { x: 280, y: 0, w: 80, h: 420 };
+const HALLWAY = { x: 280, y: 0, w: 80, h: 640 };
 
 const ROOMS = {
   whiteboard: { x: 0, y: 0, w: 280, h: 200, doorY: 90 },
   bookshelf: { x: 360, y: 0, w: 280, h: 200, doorY: 90 },
   desk: { x: 0, y: 220, w: 280, h: 200, doorY: 310 },
   bedroom: { x: 360, y: 220, w: 280, h: 200, doorY: 310 },
+  jobs: { x: 0, y: 440, w: 640, h: 200, doorY: 540 },
 };
 
 const CENTER: Record<ZoneKey, { x: number; y: number }> = {
@@ -25,6 +26,7 @@ const CENTER: Record<ZoneKey, { x: number; y: number }> = {
   bookshelf: { x: 500, y: 110 },
   desk: { x: 140, y: 320 },
   bedroom: { x: 500, y: 320 },
+  jobs: { x: 140, y: 540 },
 };
 
 const DOOR_HALLWAY_POINT: Record<ZoneKey, { x: number; y: number }> = {
@@ -32,6 +34,7 @@ const DOOR_HALLWAY_POINT: Record<ZoneKey, { x: number; y: number }> = {
   bookshelf: { x: 320, y: 90 },
   desk: { x: 320, y: 310 },
   bedroom: { x: 320, y: 310 },
+  jobs: { x: 320, y: 540 },
 };
 
 const HALLWAY_WANDER_POINTS = [
@@ -135,7 +138,7 @@ export default function Office({ onZoneClick, onSleepToggle, bubbleText, status,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedZone]);
 
-  const handleZoneClick = (zone: 'whiteboard' | 'bookshelf' | 'desk') => {
+  const handleZoneClick = (zone: 'whiteboard' | 'bookshelf' | 'desk' | 'jobs') => {
     goToZone(zone);
     onZoneClick(zone);
   };
@@ -200,14 +203,14 @@ export default function Office({ onZoneClick, onSleepToggle, bubbleText, status,
         <span style={{ color: statusColor, fontSize: 11 }}>● {status}</span>
       </div>
 
-      <svg viewBox="0 0 640 420" style={{ width: '100%', maxWidth: 700, display: 'block', imageRendering: 'pixelated' }}>
+      <svg viewBox="0 0 640 640" style={{ width: '100%', maxWidth: 700, display: 'block', imageRendering: 'pixelated' }}>
         <defs>
           <clipPath id="charClipInner">
             <rect x="0" y="0" width={FRAME_W} height={FRAME_H} />
           </clipPath>
         </defs>
 
-        <rect x="0" y="0" width="640" height="420" fill="#0a0812" />
+        <rect x="0" y="0" width="640" height="640" fill="#0a0812" />
         {renderFloor(HALLWAY.x, HALLWAY.y, HALLWAY.w, HALLWAY.h, HALLWAY_A, HALLWAY_B)}
         {Object.values(ROOMS).map((r, i) => (
           <g key={i}>{renderFloor(r.x, r.y, r.w, r.h, FLOOR_A, FLOOR_B)}</g>
@@ -219,6 +222,14 @@ export default function Office({ onZoneClick, onSleepToggle, bubbleText, status,
         <Rug x={385} y={335} w={130} h={55} color="#7a5a9b" accent="#c4a4e0" />
 
         {Object.entries(ROOMS).map(([key, r]) => {
+          if (key === 'jobs') {
+            return (
+              <g key={key}>
+                <rect x={r.x} y={r.y} width={r.w} height={WALL_T} fill={WALL_COLOR} stroke={WALL_HIGHLIGHT} strokeWidth="1" />
+                <rect x={r.x} y={r.y + r.h - WALL_T} width={r.w} height={WALL_T} fill={WALL_COLOR} stroke={WALL_HIGHLIGHT} strokeWidth="1" />
+              </g>
+            );
+          }
           const isLeft = key === 'whiteboard' || key === 'desk';
           return (
             <g key={key}>
@@ -270,6 +281,14 @@ export default function Office({ onZoneClick, onSleepToggle, bubbleText, status,
         <g onClick={handleBedClick} style={{ cursor: 'pointer' }}>
           <rect x={ROOMS.bedroom.x} y={ROOMS.bedroom.y} width={ROOMS.bedroom.w} height={ROOMS.bedroom.h} fill="transparent" />
           <image href={BED} x={435} y={225} width={85} height={112} />
+        </g>
+
+        <g onClick={() => handleZoneClick('jobs')} style={{ cursor: 'pointer' }}>
+          <rect x={ROOMS.jobs.x} y={ROOMS.jobs.y} width={ROOMS.jobs.w} height={ROOMS.jobs.h} fill="transparent" />
+          <rect x={280} y={510} width={80} height={60} rx="4" fill="#8b6d4f" stroke="#5a4530" strokeWidth="2" />
+          <rect x={290} y={520} width={60} height={8} fill="#3d6b9b" />
+          <rect x={290} y={532} width={60} height={8} fill="#4a7a4a" />
+          <rect x={290} y={544} width={60} height={8} fill="#9b3d3d" />
         </g>
 
         <motion.svg

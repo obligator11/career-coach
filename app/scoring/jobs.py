@@ -2,14 +2,18 @@ import httpx
 from app.config import settings
 
 
-async def search_adzuna(query: str, location: str = "", country: str = "us") -> list[dict]:
+async def search_adzuna(query: str, location: str = "", country: str = "us", experience_level: str = "") -> list[dict]:
     """Adzuna: real global listings + salary data. Free tier: 1000 calls/month.
     Note: 'where' must be a real place (city/country) - Adzuna has no 'remote' location filter,
     so remote-style searches just omit location and rely on the query text instead."""
+    search_query = query
+    if experience_level:
+        search_query = f"{experience_level} {query}"
+
     params = {
         "app_id": settings.adzuna_app_id,
         "app_key": settings.adzuna_app_key,
-        "what": query,
+        "what": search_query,
         "results_per_page": 10,
     }
     if location and location.lower() != "remote":
@@ -85,12 +89,12 @@ async def search_arbeitnow(query: str) -> list[dict]:
     return results[:10]
 
 
-async def search_all_jobs(query: str, location: str = "") -> list[dict]:
+async def search_all_jobs(query: str, location: str = "", experience_level: str = "") -> list[dict]:
     """Combine all three sources, tolerate individual failures gracefully."""
     import asyncio
 
     results = await asyncio.gather(
-        search_adzuna(query, location),
+        search_adzuna(query, location, experience_level=experience_level),
         search_remoteok(query),
         search_arbeitnow(query),
         return_exceptions=True,

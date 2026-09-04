@@ -7,6 +7,11 @@ const USER_ID = 'bd104925-3234-4fd7-a183-0528989d798d';
 const API_BASE = 'http://127.0.0.1:8000';
 const TOPICS_KEY = 'coach_recent_topics';
 
+const NAME_OPTIONS = [
+  'Nova', 'Sage', 'Compass', 'Atlas', 'Forge', 'Vector', 'Beacon', 'Axiom',
+  'Orbit', 'Pace', 'Echo', 'Lumen', 'Cipher', 'Wren', 'Halo',
+];
+
 interface Skill { skill: string; score: number; }
 interface RoadmapItem { title: string; description: string; target_skill: string; status: string; }
 interface Summary {
@@ -15,6 +20,7 @@ interface Summary {
   repos: { name: string; last_synced_at: string | null }[];
 }
 interface Topic { text: string; time: string; }
+interface Job { id: string; title: string; company: string; location: string; url: string; source: string; status: string; }
 
 type Status = 'idle' | 'thinking' | 'online' | 'asleep';
 
@@ -23,6 +29,7 @@ function decideZone(text: string): ZoneKey {
   if (/skill|python|language|score|strong|good at/.test(t)) return 'bookshelf';
   if (/roadmap|project|next|build|idea|suggest/.test(t)) return 'whiteboard';
   if (/sleep|rest|bed|off|quiet/.test(t)) return 'bedroom';
+  if (/job|apply|hiring|position|vacancy|career/.test(t)) return 'jobs';
   return 'desk';
 }
 
@@ -106,7 +113,7 @@ function TagInput({
 }
 
 function App() {
-  const [mode, setMode] = useState<'local' | 'gemini' | null>(null);
+  const [mode, setMode] = useState<'local' | 'gemini'>('gemini');
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bubbleText, setBubbleText] = useState<string | null>(null);
@@ -116,9 +123,14 @@ function App() {
   const ambientTimer = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+
   const [prefsChecked, setPrefsChecked] = useState(false);
   const [prefsExist, setPrefsExist] = useState(true);
+  const [assistantName, setAssistantName] = useState('Nova');
   const [prefsForm, setPrefsForm] = useState({
+    assistant_name: 'Nova',
     degree_field: '',
     target_roles: [] as string[],
     preferred_locations: [] as string[],
@@ -134,15 +146,21 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!mode) return;
+    loadSavedJobs();
+  }, []);
+
+  useEffect(() => {
     fetch(`${API_BASE}/me/preferences?user_id=${USER_ID}`)
       .then((res) => res.json())
       .then((data) => {
         setPrefsExist(data.exists);
+        if (data.exists && data.assistant_name) {
+          setAssistantName(data.assistant_name);
+        }
         setPrefsChecked(true);
       })
       .catch(() => setPrefsChecked(true));
-  }, [mode]);
+  }, []);
 
   useEffect(() => {
     if (!summary || status === 'asleep') return;
@@ -208,10 +226,35 @@ function App() {
     return reply;
   };
 
-  const handleZoneClick = async (zone: 'whiteboard' | 'bookshelf' | 'desk') => {
+  const loadSavedJobs = async () => {
+    const res = await fetch(`${API_BASE}/me/jobs/saved?user_id=${USER_ID}`);
+    setJobs(await res.json());
+  };
+
+  const searchJobs = async () => {
+    setJobsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/me/jobs?user_id=${USER_ID}`);
+      const data = await res.json();
+      setJobs(data.jobs || []);
+    } finally {
+      setJobsLoading(false);
+    }
+  };
+
+  const updateJobStatus = async (jobId: string, status: string) => {
+    await fetch(`${API_BASE}/me/jobs/${jobId}/status?user_id=${USER_ID}&status=${status}`, { method: 'POST' });
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, status } : j)));
+  };
+
+  const handleZoneClick = async (zone: 'whiteboard' | 'bookshelf' | 'desk' | 'jobs') => {
     if (!summary || status === 'asleep') return;
     setRequestedZone(zone);
-    if (zone === 'whiteboard') {
+    if (zone === 'jobs') {
+      setBubbleText('Searching for jobs that match your preferences...');
+      await searchJobs();
+      setBubbleText(`Found ${jobs.length} jobs matching your preferences`);
+    } else if (zone === 'whiteboard') {
       const text = `${summary.roadmap.length} project ideas waiting for you`;
       setBubbleText(text);
       logTopic('roadmap');
@@ -243,6 +286,7 @@ function App() {
   const savePreferences = async () => {
     const params = new URLSearchParams({
       user_id: USER_ID,
+      assistant_name: prefsForm.assistant_name,
       degree_field: prefsForm.degree_field,
       target_roles: prefsForm.target_roles.join(','),
       preferred_locations: prefsForm.preferred_locations.join(','),
@@ -250,54 +294,11 @@ function App() {
       experience_level: prefsForm.experience_level,
     });
     await fetch(`${API_BASE}/me/preferences?${params.toString()}`, { method: 'POST' });
+    setAssistantName(prefsForm.assistant_name);
     setPrefsExist(true);
   };
 
-  if (!mode) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 20,
-          background: 'radial-gradient(circle at 50% 0%, #1a1030 0%, #0a0a12 60%)',
-          fontFamily: "'Segoe UI', sans-serif",
-        }}
-      >
-        <h1 style={{ color: '#fff', fontSize: 24, letterSpacing: 1 }}>
-          CAREER COACH <span style={{ color: '#c084fc' }}>AI</span>
-        </h1>
-        <p style={{ color: '#aaa', fontSize: 14, marginBottom: 10 }}>How should Nova think today?</p>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <button
-            onClick={() => setMode('local')}
-            style={{
-              padding: '16px 28px', borderRadius: 10, border: '1px solid #4a4066',
-              background: '#16162a', color: '#c084fc', fontSize: 15, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            Local (Ollama)<br />
-            <span style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>Offline, private, slower</span>
-          </button>
-          <button
-            onClick={() => setMode('gemini')}
-            style={{
-              padding: '16px 28px', borderRadius: 10, border: '1px solid #4a4066',
-              background: '#16162a', color: '#5b8def', fontSize: 15, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            Gemini (Cloud)<br />
-            <span style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>Fast, needs internet</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (mode && prefsChecked && !prefsExist) {
+  if (prefsChecked && !prefsExist) {
     return (
       <div
         style={{
@@ -306,11 +307,32 @@ function App() {
           fontFamily: "'Segoe UI', sans-serif", padding: 24,
         }}
       >
-        <h1 style={{ color: '#fff', fontSize: 22 }}>Tell Nova about yourself</h1>
-        <p style={{ color: '#aaa', fontSize: 13, marginBottom: 10 }}>
-          This is asked once - Nova will use it to find relevant jobs later.
+        <h1 style={{ color: '#fff', fontSize: 22 }}>Set up your assistant</h1>
+        <p style={{ color: '#aaa', fontSize: 13, marginBottom: 4 }}>
+          This is asked once - your assistant will use it to find relevant jobs later.
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 340 }}>
+
+        <div style={{ width: 400, marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 8, textAlign: 'center' }}>Pick a name to call it</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+            {NAME_OPTIONS.map((name) => (
+              <button
+                key={name}
+                onClick={() => setPrefsForm({ ...prefsForm, assistant_name: name })}
+                style={{
+                  padding: '6px 14px', borderRadius: 16, cursor: 'pointer', fontSize: 13,
+                  border: prefsForm.assistant_name === name ? '1px solid #c084fc' : '1px solid #2a2a40',
+                  background: prefsForm.assistant_name === name ? '#2a2350' : '#16162a',
+                  color: prefsForm.assistant_name === name ? '#c084fc' : '#aaa',
+                }}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 340, marginTop: 10 }}>
           <input
             placeholder="Degree / field (e.g. Computer Science)"
             value={prefsForm.degree_field}
@@ -396,6 +418,28 @@ function App() {
         <h1 style={{ color: '#fff', fontSize: 20, fontWeight: 600, margin: 0, letterSpacing: 1 }}>
           CAREER COACH <span style={{ color: '#c084fc' }}>AI</span>
         </h1>
+
+        <button
+          onClick={() => setPrefsExist(false)}
+          style={{
+            marginLeft: 'auto', padding: '7px 12px', borderRadius: 6, border: '1px solid #4a4066',
+            background: '#16162a', color: '#aaa', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginRight: 8,
+          }}
+        >
+          ⚙ Preferences
+        </button>
+        <select
+          value={mode}
+          onChange={(e) => setMode(e.target.value as 'local' | 'gemini')}
+          style={{
+            padding: '7px 12px', borderRadius: 6, border: '1px solid #4a4066',
+            background: '#16162a', color: mode === 'gemini' ? '#5b8def' : '#c084fc',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          <option value="gemini">⚡ Fast mode (needs internet)</option>
+          <option value="local">🔒 Private mode (works offline)</option>
+        </select>
       </div>
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'nowrap', maxWidth: 1400, margin: '0 auto' }}>
@@ -458,7 +502,7 @@ function App() {
             >
               <input
                 type="text"
-                placeholder="Type instruction or ask your coach..."
+                placeholder={`Type instruction or ask ${assistantName}...`}
                 style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: 14 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && e.currentTarget.value.trim()) {
@@ -468,6 +512,62 @@ function App() {
                   }
                 }}
               />
+            </div>
+          )}
+
+          {status !== 'asleep' && (
+            <div
+              style={{
+                marginTop: 16,
+                background: '#16162a',
+                border: '1px solid #2a2a40',
+                borderRadius: 8,
+                padding: 14,
+                color: '#fff',
+                maxHeight: 400,
+                overflowY: 'auto',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 11, letterSpacing: 2, color: '#888' }}>JOBS</span>
+                <button
+                  onClick={searchJobs}
+                  disabled={jobsLoading}
+                  style={{
+                    fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid #4a4066',
+                    background: '#1a1a2e', color: '#c084fc', cursor: 'pointer',
+                  }}
+                >
+                  {jobsLoading ? 'Searching...' : 'Search now'}
+                </button>
+              </div>
+              {jobs.length === 0 && (
+                <div style={{ fontSize: 12, color: '#666' }}>No jobs yet - click "Search now" or ask about jobs.</div>
+              )}
+              {jobs.map((job) => (
+                <div key={job.id} style={{ padding: '8px 0', borderBottom: '1px solid #22223a' }}>
+                  <a href={job.url} target="_blank" rel="noreferrer" style={{ color: '#c084fc', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                    {job.title}
+                  </a>
+                  <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>{job.company} · {job.location} · {job.source}</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    {['interested', 'applied', 'rejected'].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => updateJobStatus(job.id, s)}
+                        style={{
+                          fontSize: 10, padding: '3px 8px', borderRadius: 10, cursor: 'pointer',
+                          border: job.status === s ? '1px solid #c084fc' : '1px solid #2a2a40',
+                          background: job.status === s ? '#2a2350' : 'transparent',
+                          color: job.status === s ? '#c084fc' : '#888',
+                        }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
