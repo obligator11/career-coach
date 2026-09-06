@@ -21,7 +21,10 @@ export default function VoiceAssistant({
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.lang = 'en-US';
-    recognition.interimResults = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
 
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error);
@@ -36,11 +39,16 @@ export default function VoiceAssistant({
     };
 
     recognition.onresult = async (event: any) => {
-      const text = event.results[0][0].transcript;
+      const result = event.results[event.results.length - 1];
+      const text = result[0].transcript;
       setTranscript(text);
-      // onMessage handles the full flow (thinking status, fetch, and speaking the reply)
+
+      if (!result.isFinal) return; // still speaking - wait for the final transcript
+
+      onStatusChange('thinking');
       const replyText = await onMessage(text);
       setReply(replyText);
+      onStatusChange('online');
     };
 
     recognition.start();
@@ -69,10 +77,38 @@ export default function VoiceAssistant({
           background: listening ? '#fbbf24' : '#c084fc',
           color: '#1a1a2e',
           fontWeight: 'bold',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 3,
+          minWidth: 160,
         }}
       >
-        {listening ? 'Listening...' : 'Talk to your coach'}
+        {listening ? (
+          <>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <span
+                key={i}
+                style={{
+                  display: 'inline-block',
+                  width: 3,
+                  background: '#1a1a2e',
+                  borderRadius: 2,
+                  animation: `wavebar 0.8s ease-in-out ${i * 0.1}s infinite`,
+                }}
+              />
+            ))}
+          </>
+        ) : (
+          'Talk to your coach'
+        )}
       </button>
+      <style>{`
+        @keyframes wavebar {
+          0%, 100% { height: 6px; }
+          50% { height: 20px; }
+        }
+      `}</style>
       {transcript && <p style={{ marginTop: 10, color: '#aaa' }}>You said: "{transcript}"</p>}
       {reply && <p style={{ marginTop: 6 }}>Coach: {reply}</p>}
     </div>

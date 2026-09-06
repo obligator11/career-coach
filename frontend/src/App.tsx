@@ -182,7 +182,19 @@ function App() {
     return () => { if (ambientTimer.current) clearTimeout(ambientTimer.current); };
   }, [summary, status]);
 
-  const speak = async (text: string) => {
+  const isUrduText = (text: string) => /[\u0600-\u06FF]/.test(text); // Arabic/Urdu script range
+
+const speak = async (text: string) => {
+    if (isUrduText(text)) {
+      const voices = window.speechSynthesis.getVoices();
+      const urduVoice = voices.find((v) => v.lang.startsWith('ur'));
+      const utterance = new SpeechSynthesisUtterance(text);
+      if (urduVoice) utterance.voice = urduVoice;
+      utterance.lang = 'ur-PK';
+      window.speechSynthesis.speak(utterance);
+      return;
+    }
+
     try {
       const res = await fetch(`${API_BASE}/me/coach-voice?text=${encodeURIComponent(text)}`);
       const blob = await res.blob();

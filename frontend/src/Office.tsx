@@ -37,11 +37,12 @@ const DOOR_HALLWAY_POINT: Record<ZoneKey, { x: number; y: number }> = {
   jobs: { x: 320, y: 540 },
 };
 
-const HALLWAY_WANDER_POINTS = [
-  { x: 320, y: 60 },
-  { x: 320, y: 150 },
-  { x: 320, y: 270 },
-  { x: 320, y: 360 },
+const WANDER_TARGETS: { zone: ZoneKey; point: { x: number; y: number } }[] = [
+  { zone: 'whiteboard', point: CENTER.whiteboard },
+  { zone: 'bookshelf', point: CENTER.bookshelf },
+  { zone: 'desk', point: CENTER.desk },
+  { zone: 'jobs', point: { x: 160, y: 540 } },
+  { zone: 'jobs', point: { x: 480, y: 540 } },
 ];
 
 const RUN_SHEET = '/assets/character-v2/Amelia_run_16x16.png';
@@ -103,6 +104,7 @@ export default function Office({ onZoneClick, onSleepToggle, bubbleText, status,
   }, [walking]);
 
   const walkPath = (points: { x: number; y: number }[], onDone?: () => void) => {
+    if (busyRef.current) return; // hard guard: never start a new path while one is already running
     busyRef.current = true;
     setWalking(true);
     let i = 0;
@@ -122,7 +124,11 @@ export default function Office({ onZoneClick, onSleepToggle, bubbleText, status,
 
   const goToZone = (zone: ZoneKey) => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
-    if (zone === currentZone.current || busyRef.current) return;
+    if (zone === currentZone.current) return;
+    if (busyRef.current) {
+      window.setTimeout(() => goToZone(zone), LEG_DURATION * 1000);
+      return;
+    }
 
     const fromDoor = DOOR_HALLWAY_POINT[currentZone.current];
     const toDoor = DOOR_HALLWAY_POINT[zone];
@@ -152,11 +158,12 @@ export default function Office({ onZoneClick, onSleepToggle, bubbleText, status,
     if (status === 'asleep') return;
 
     function scheduleWander() {
-      const delay = 6000 + Math.random() * 4000;
+      const delay = 8000 + Math.random() * 5000;
       idleTimer.current = window.setTimeout(() => {
         if (!busyRef.current) {
-          const point = HALLWAY_WANDER_POINTS[Math.floor(Math.random() * HALLWAY_WANDER_POINTS.length)];
-          walkPath([point]);
+          const candidates = WANDER_TARGETS.filter((t) => t.zone !== currentZone.current);
+          const target = candidates[Math.floor(Math.random() * candidates.length)];
+          goToZone(target.zone); // same exact mechanism as clicking a room - proven to work
         }
         scheduleWander();
       }, delay);
@@ -292,11 +299,14 @@ export default function Office({ onZoneClick, onSleepToggle, bubbleText, status,
         </g>
 
         <motion.svg
+          initial={false}
           width={charW}
           height={charH}
           viewBox={`0 0 ${FRAME_W} ${FRAME_H}`}
           animate={{ x: pos.x - charW / 2, y: pos.y - charH + 8 }}
           transition={{ duration: LEG_DURATION, ease: 'easeInOut' }}
+          onAnimationStart={() => console.log('anim start', pos)}
+          onAnimationComplete={() => console.log('anim complete', pos)}
         >
           <image
             href={activeSheet}
