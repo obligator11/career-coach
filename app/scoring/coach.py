@@ -11,12 +11,14 @@ class CoachAdvice(BaseModel):
     message: str
 
 
-SYSTEM_PROMPT = """You are a warm, encouraging career coach having a real spoken conversation with a developer.
-This is a VOICE conversation - keep replies SHORT (1-3 sentences), natural, and conversational, like a real person talking, not writing.
+SYSTEM_PROMPT = """You are a warm, direct career coach having a real spoken conversation with a developer.
+This is a VOICE conversation - keep replies SHORT (1-2 sentences, rarely 3), natural, like a real person talking casually, not writing an email.
 Respond with ONLY a JSON object, no other text:
 {"message": "your spoken reply"}
 Never use bullet points, headers, or markdown - this will be spoken aloud.
-React directly and specifically to what the developer just said. Be genuinely helpful, not generic."""
+Only bring up specific project suggestions or skill names if the person's question is actually about that topic - don't force unrelated context into every answer.
+Vary your phrasing - don't repeat the same project names or observations across different questions unless directly asked.
+React directly and specifically to what was just said."""
 
 
 async def get_coach_advice(user_message: str, context: str = "", history: list[dict] | None = None) -> CoachAdvice:
@@ -54,10 +56,18 @@ async def get_coach_advice_gemini(user_message: str, context: str = "", history:
             prompt_parts.append(f"{turn['role']}: {turn['content']}")
     prompt_parts.append(f"user: {user_message}")
 
-    response = await client.aio.models.generate_content(
-        model="gemini-3.6-flash",
-        contents="\n\n".join(prompt_parts),
-    )
+    import asyncio
+
+    try:
+        response = await asyncio.wait_for(
+            client.aio.models.generate_content(
+                model="gemini-3.6-flash",
+                contents="\n\n".join(prompt_parts),
+            ),
+            timeout=10.0,
+        )
+    except asyncio.TimeoutError:
+        raise RuntimeError("Gemini timed out - server may be under high load right now")
 
     raw_text = response.text.strip()
     if raw_text.startswith("```"):
