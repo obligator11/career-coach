@@ -1,11 +1,26 @@
 import httpx
 import json
+import re
+import asyncio
 from pydantic import BaseModel
 from google import genai
 from app.config import settings
 
+from app.scoring.web_search import search_web
+
 OLLAMA_URL = "http://localhost:11434/api/chat"
 
+SEARCH_TRIGGERS = re.compile(
+    r"\b(latest|news|new|recent|today|current|update|what'?s happening|what'?s new|"
+    r"this week|this month|right now|nowadays|these days)\b",
+    re.IGNORECASE,
+)
+
+def needs_web_search(text: str) -> bool:
+    """Simple keyword heuristic - not perfect, but catches the clear cases
+    ('what's the latest', 'any news about', etc.) without needing a separate
+    LLM call just to decide whether to search."""
+    return bool(SEARCH_TRIGGERS.search(text))
 
 class CoachAdvice(BaseModel):
     message: str
@@ -44,19 +59,31 @@ async def get_coach_advice(user_message: str, context: str = "", history: list[d
     return CoachAdvice(**json.loads(raw_text))
 
 
-
 async def get_coach_advice_gemini(user_message: str, context: str = "", history: list[dict] | None = None) -> CoachAdvice:
     client = genai.Client(api_key=settings.gemini_api_key)
+    
+    search_context = ""
+    if needs_web_search(user_message):
+        try:
+            search_result = search_web(user_message)
+            if search_result.get("answer"):
+                search_context = f"\n\nReal-time web search result (use this for accuracy, it's more current than your training data): {search_result['answer']}"
+        except Exception as e:
+            print(f"Web search failed, continuing without it: {e}")
 
     prompt_parts = [SYSTEM_PROMPT]
+    
     if context:
         prompt_parts.append(f"Known context about this developer: {context}")
+        
+    if search_context:
+        prompt_parts.append(search_context)
+        
     if history:
         for turn in history[-6:]:
             prompt_parts.append(f"{turn['role']}: {turn['content']}")
+            
     prompt_parts.append(f"user: {user_message}")
-
-    import asyncio
 
     try:
         response = await asyncio.wait_for(
